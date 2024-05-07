@@ -8,6 +8,10 @@ class State(Enum):
     MESSAGE_IDENTIFIED = auto()
     REPORT_COMPLETE = auto()
     CONFIRMATION_MESSAGE = auto ()
+    ADDITIONAL_COMMENT_PROMPT = auto()
+    ADDITIONAL_COMMENTS = auto ()
+    BLOCK_USER_PROMPT = auto ()
+    OFFENSIVE_CONTENT = auto ()
 
 class Report:
     START_KEYWORD = "report"
@@ -19,6 +23,7 @@ class Report:
         self.client = client
         self.message = None
         self.reported_message = None
+        self.comment = None
         self.step = None
         self.abuse_type = None
         self.result = []
@@ -30,7 +35,7 @@ class Report:
         get you started and give you a model for working with Discord. 
         '''
 
-        if message.content == self.CANCEL_KEYWORD:
+        if message.content.lower() == self.CANCEL_KEYWORD:
             self.state = State.REPORT_COMPLETE
             return ["Report cancelled."]
         
@@ -54,76 +59,89 @@ class Report:
             if not channel:
                 return ["It seems this channel was deleted or never existed. Please try again or say `cancel` to cancel."]
             try:
-                message = await channel.fetch_message(int(m.group(3)))
+                self.reported_message = await channel.fetch_message(int(m.group(3)))
             except discord.errors.NotFound:
                 return ["It seems this message was deleted or never existed. Please try again or say `cancel` to cancel."]
 
             # Here we've found the message - it's up to you to decide what to do next!
-            self.state = State.MESSAGE_IDENTIFIED
+            self.state = State.CONFIRMATION_MESSAGE
+            return ["I found this message:", "```" + self.reported_message.author.name + ": " + self.reported_message.content + "```", 
+                        "Is this the message you want to report? (yes/no)"]
 
-            if self.state == State.CONFIRMING_MESSAGE:
-            # ask the user to confirm if this is the message they wanted to report
-                if self.abuse_type == None:
-                    confirmation_prompt = "I found this message:", "\n" + self.reported_message.author.name + ": " + self.reported_message.content + "\n", "Is this the message you want to report? (yes/no)"
-                    self.abuse_type = 0
-                    return [confirmation_prompt]
+        if self.state == State.CONFIRMATION_MESSAGE:
+        # ask the user to confirm if this is the message they wanted to report
 
-                if message.content.lower() not in ["Yes", "No"]:
-                    self.abuse_type = 0
-                    return ["Please respond appropriately (ONLY yes or no)."]
+            if message.content.lower() not in ["yes", "no"]:
+                return ["Please respond with yes or no only."]
 
-                if message.content.lower() == "No":
-                    self.state = State.AWAITING_MESSAGE
-                    self.abuse_type = None
-                    return ["I'm sorry, I couldn't find the message you mentioned. Could you please verify the link and send it again?"]
+            if message.content.lower() == "no":
+                self.state = State.AWAITING_MESSAGE
+                return ["I'm sorry, could you please verify the link and try again?"]
 
-                if message.content.lower() == "Yes":
-                    self.state = State.MESSAGE_IDENTIFIED
-                    self.result.append(self.reported_message)
-                    self.abuse_type = None
+            if message.content.lower() == "yes":
+                self.state = State.MESSAGE_IDENTIFIED
+                confirmed = "Thank you for confirming! Please answer a few questions so that we can better assist you."
+                reply = "Please select a reason for reporting this user (Enter the corresponding number):\n"
+                types = [
+                    "Spam",
+                    "Harassment",
+                    "Offensive Content",
+                ]
+                for i, option in enumerate(types, start=1):
+                    reply += f"{i}. {option}\n"
+                return [confirmed, reply]
 
-            if self.state == State.MESSAGE_IDENTIFIED:
-                if self.abuse_type == None:
-                    confirmed = "Thank you for confirming! Please answer a few questions so that we can better assist you."
-                    reply = "Please select a reason for reporting this user (Enter the corresponding number):\n"
-                    types = [
-                        "Spam",
-                        "Harassment",
-                        "Offensive Content",
-                    ]
-                    for i, option in enumerate(options, start=1):
-                        reply += f"{i}. {option}\n"
-                    self.abuse_type = 1
-                    return [confirmed, reply]
-
-                if self.abuse_type == 1:
-                    if message.content not in ['1', '2', '3', '4']:
-                        return ["Please enter only a valid number (1, 2, 3, 4)"]
-                    self.abuse_type = 2
-                    self.message = message
-                
-                #Spam 
-                if self.message.content == "1":
-                    if self.abuse_type == 2:
-                        response = "Would you like to provide additional comments or include any direct messages?"
-                return [confirm, reply]
-
-                #Harassment
-                if self.message.content == "2":
-                    if self.abuse_type == 2:
-                #Offensive Content
-                
-
+        if self.state == State.MESSAGE_IDENTIFIED:
+            if message.content not in ['1', '2', '3']:
+                return ["Please enter a valid number (1, 2, 3)"]
             
-            
+            self.abuse_type = message.content
 
-            return ["<insert rest of reporting flow here>"]
-
-            return ["I found this message:", "```" + message.author.name + ": " + message.content + "```", \
-                    "This is all I know how to do right now - it's up to you to build out the rest of my reporting flow!"]
+            # Spam or Harassment
+            if message.content == "1" or message.content == "2":
+                self.state = State.ADDITIONAL_COMMENT_PROMPT
+                return ["Would you like to provide additional comments or include any direct messages?"]
+            else:
+                self.state = State.OFFENSIVE_CONTENT
+                reply = "Please select the category this offensive content best fits into (Enter the corresponding number):\n"
+                types = [
+                    "Hate Speech",
+                    "Sexually Explicit Content",
+                    "Child Sexual Abuse Material",
+                    "Violent / Graphic Content",
+                    "Extremist Content"
+                ]
+                for i, option in enumerate(types, start=1):
+                    reply += f"{i}. {option}\n"
+                return [reply]
         
+        if self.state == State.ADDITIONAL_COMMENT_PROMPT:
+            if message.content.lower() not in ["yes", "no"]:
+                return ["Please respond with yes or no only."]
 
-        return []
+            if message.content.lower() == "no":
+                self.state = State.BLOCK_USER_PROMPT
+                return ["Would you like to block the user who posted this content?"]
+
+            if message.content.lower() == "yes":
+                self.state = State.ADDITIONAL_COMMENTS
+                return ["Please attach any relevant photos, links, and/or additional information in a single message."]
+
+        if self.state == State.ADDITIONAL_COMMENTS:
+            self.comment = message.content
+            self.state = State.BLOCK_USER_PROMPT
+            return ["Would you like to block the user who posted this content?"]
+
+        if self.state == State.BLOCK_USER_PROMPT:
+            if message.content.lower() not in ["yes", "no"]:
+                return ["Please respond with yes or no only."]
+            reply = "Thank you for completing this report.\n"
+            reply += "Our content moderation team will review this post and decide on an appropriate action."
+            self.state = State.REPORT_COMPLETE
+            if message.content.lower() == "yes":
+                # TODO: output block user message in channel
+                reply += "\n" + self.reported_message.author.name + " has been blocked."
+            return [reply]
 
     def report_complete(self):
         return self.state == State.REPORT_COMPLETE
