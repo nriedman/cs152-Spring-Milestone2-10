@@ -7,6 +7,7 @@ class State(Enum):
     AWAITING_MESSAGE = auto()
     MESSAGE_IDENTIFIED = auto()
     REPORT_COMPLETE = auto()
+    CONFIRMATION_MESSAGE = auto ()
 
 class Report:
     START_KEYWORD = "report"
@@ -17,6 +18,10 @@ class Report:
         self.state = State.REPORT_START
         self.client = client
         self.message = None
+        self.reported_message = None
+        self.step = None
+        self.abuse_type = None
+        self.result = []
     
     async def handle_message(self, message):
         '''
@@ -55,11 +60,68 @@ class Report:
 
             # Here we've found the message - it's up to you to decide what to do next!
             self.state = State.MESSAGE_IDENTIFIED
+
+            if self.state == State.CONFIRMING_MESSAGE:
+            # ask the user to confirm if this is the message they wanted to report
+                if self.abuse_type == None:
+                    confirmation_prompt = "I found this message:", "\n" + self.reported_message.author.name + ": " + self.reported_message.content + "\n", "Is this the message you want to report? (yes/no)"
+                    self.abuse_type = 0
+                    return [confirmation_prompt]
+
+                if message.content.lower() not in ["Yes", "No"]:
+                    self.abuse_type = 0
+                    return ["Please respond appropriately (ONLY yes or no)."]
+
+                if message.content.lower() == "No":
+                    self.state = State.AWAITING_MESSAGE
+                    self.abuse_type = None
+                    return ["I'm sorry, I couldn't find the message you mentioned. Could you please verify the link and send it again?"]
+
+                if message.content.lower() == "Yes":
+                    self.state = State.MESSAGE_IDENTIFIED
+                    self.result.append(self.reported_message)
+                    self.abuse_type = None
+
+            if self.state == State.MESSAGE_IDENTIFIED:
+                if self.abuse_type == None:
+                    confirmed = "Thank you for confirming! Please answer a few questions so that we can better assist you."
+                    reply = "Please select a reason for reporting this user (Enter the corresponding number):\n"
+                    types = [
+                        "Spam",
+                        "Harassment",
+                        "Offensive Content",
+                    ]
+                    for i, option in enumerate(options, start=1):
+                        reply += f"{i}. {option}\n"
+                    self.abuse_type = 1
+                    return [confirmed, reply]
+
+                if self.abuse_type == 1:
+                    if message.content not in ['1', '2', '3', '4']:
+                        return ["Please enter only a valid number (1, 2, 3, 4)"]
+                    self.abuse_type = 2
+                    self.message = message
+                
+                #Spam 
+                if self.message.content == "1":
+                    if self.abuse_type == 2:
+                        response = "Would you like to provide additional comments or include any direct messages?"
+                return [confirm, reply]
+
+                #Harassment
+                if self.message.content == "2":
+                    if self.abuse_type == 2:
+                #Offensive Content
+                
+
+            
+            
+
+            return ["<insert rest of reporting flow here>"]
+
             return ["I found this message:", "```" + message.author.name + ": " + message.content + "```", \
                     "This is all I know how to do right now - it's up to you to build out the rest of my reporting flow!"]
         
-        if self.state == State.MESSAGE_IDENTIFIED:
-            return ["<insert rest of reporting flow here>"]
 
         return []
 
