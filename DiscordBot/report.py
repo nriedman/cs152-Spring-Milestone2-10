@@ -12,6 +12,32 @@ class State(Enum):
     ADDITIONAL_COMMENTS = auto ()
     BLOCK_USER_PROMPT = auto ()
     OFFENSIVE_CONTENT = auto ()
+    EXTREMIST_CONTENT = auto ()
+    THREAT = auto ()
+
+class GenAbuseType():
+    SPAM = 1
+    HARASSMENT = 2
+    OFFENSIVE_CONTENT = 3
+    THREAT = 4
+
+class OffensiveContentType():
+    HATE = 1
+    EXPLICIT = 2
+    CSAM = 3
+    VIOLENT = 4
+    EXTREMIST = 5
+
+class ExtremistContentType():
+    VIOLENCE = 1
+    RECRUITMENT = 2
+    PROPAGANDA = 3
+
+class ThreatType():
+    SELF = 1
+    OTHERS = 2
+    PUBLIC = 3
+    TERROR = 4
 
 class Report:
     START_KEYWORD = "report"
@@ -26,6 +52,9 @@ class Report:
         self.comment = None
         self.step = None
         self.abuse_type = None
+        self.offensive_type = None
+        self.extremist_type = None
+        self.threat_type = None
         self.result = []
     
     async def handle_message(self, message):
@@ -86,22 +115,22 @@ class Report:
                     "Spam",
                     "Harassment",
                     "Offensive Content",
+                    "Imminent Safety Threat"
                 ]
                 for i, option in enumerate(types, start=1):
                     reply += f"{i}. {option}\n"
                 return [confirmed, reply]
 
         if self.state == State.MESSAGE_IDENTIFIED:
-            if message.content not in ['1', '2', '3']:
-                return ["Please enter a valid number (1, 2, 3)"]
+            if message.content not in ['1', '2', '3', '4']:
+                return ["Please enter a valid number (1, 2, 3, 4)"]
             
-            self.abuse_type = message.content
-
-            # Spam or Harassment
-            if message.content == "1" or message.content == "2":
+            self.abuse_type = int(message.content)
+            if self.abuse_type == GenAbuseType.SPAM or self.abuse_type == GenAbuseType.HARASSMENT:
                 self.state = State.ADDITIONAL_COMMENT_PROMPT
                 return ["Would you like to provide additional comments or include any direct messages?"]
-            else:
+            
+            if self.abuse_type == GenAbuseType.OFFENSIVE_CONTENT:
                 self.state = State.OFFENSIVE_CONTENT
                 reply = "Please select the category this offensive content best fits into (Enter the corresponding number):\n"
                 types = [
@@ -114,6 +143,79 @@ class Report:
                 for i, option in enumerate(types, start=1):
                     reply += f"{i}. {option}\n"
                 return [reply]
+            
+            if self.abuse_type == GenAbuseType.THREAT:
+                self.state = State.THREAT
+                reply = "Please select the category this imminent safety threat best fits into (Enter the corresponding number):\n"
+                types = [
+                    "Threat to Self",
+                    "Threat to Others",
+                    "Public Safety Concern",
+                    "Terrorist Attack"
+                ]
+                for i, option in enumerate(types, start=1):
+                    reply += f"{i}. {option}\n"
+                return [reply]
+        
+        if self.state == State.OFFENSIVE_CONTENT:
+            if message.content not in ['1', '2', '3', '4', '5']:
+                return ["Please enter a valid number (1, 2, 3, 4, 5)"]
+            
+            self.offensive_type = int(message.content)
+            
+            if self.offensive_type != OffensiveContentType.EXTREMIST:
+                reply = ""
+                if self.offensive_type == OffensiveContentType.VIOLENT:
+                    reply += "We will review the violent content and take appropriate action, such as post and/or account removal.\n"
+                reply += "Would you like to provide additional comments or include any direct messages?"
+
+                self.state = State.ADDITIONAL_COMMENT_PROMPT
+                return [reply]
+            else:
+                self.state = State.EXTREMIST_CONTENT
+                reply = "Please select the category this extremist content best fits into (Enter the corresponding number):\n"
+                types = [
+                    "Violence",
+                    "Recruitment",
+                    "Propaganda"
+                ]
+                for i, option in enumerate(types, start=1):
+                    reply += f"{i}. {option}\n"
+                return [reply]
+        
+        if self.state == State.EXTREMIST_CONTENT:
+            if message.content not in ['1', '2', '3']:
+                return ["Please enter a valid number (1, 2, 3)"]
+            
+            self.extremist_type = int(message.content)
+
+            reply = ""
+            keyword = ""
+            if self.extremist_type == ExtremistContentType.PROPAGANDA:
+                keyword = "propaganda"
+            if self.extremist_type == ExtremistContentType.RECRUITMENT:
+                keyword = "recruitment"
+                reply += "We recommend contacting law enforcement and sharing any recruitment direct messages received.\n"
+            if self.extremist_type == ExtremistContentType.VIOLENCE:
+                keyword = "violence"
+            reply += "We will review the " + keyword + " content and take appropriate action, such as post and/or account removal.\n"
+            reply += "Would you like to provide additional comments or include any direct messages?"
+            
+            self.state = State.ADDITIONAL_COMMENT_PROMPT
+            return [reply]
+
+        if self.state == State.THREAT:
+            if message.content not in ['1', '2', '3', '4']:
+                return ["Please enter a valid number (1, 2, 3, 4)"]
+            
+            self.threat_type = int(message.content)
+
+            reply = "We recommend contacting law enforcement immediately and sharing any information you have.\n"
+            reply += "We will also examine the content and take appropriate action, such as post and/or account removal.\n"
+            reply += "Would you like to provide additional comments or include any direct messages?"
+
+            self.state = State.ADDITIONAL_COMMENT_PROMPT
+            return [reply]
         
         if self.state == State.ADDITIONAL_COMMENT_PROMPT:
             if message.content.lower() not in ["yes", "no"]:
