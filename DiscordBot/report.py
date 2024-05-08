@@ -55,6 +55,14 @@ class Report:
         self.offensive_type = None
         self.extremist_type = None
         self.threat_type = None
+
+        self.reported_content = None
+        self.reported_user = None
+        self.reporting_user = None
+
+        self.severity = None
+        self.is_valid = True
+        self.priority = None
         self.result = []
     
     async def handle_message(self, message):
@@ -65,6 +73,7 @@ class Report:
         '''
 
         if message.content.lower() == self.CANCEL_KEYWORD:
+            self.is_valid = False
             self.state = State.REPORT_COMPLETE
             return ["Report cancelled."]
         
@@ -74,6 +83,7 @@ class Report:
             reply += "Please copy paste the link to the message you want to report.\n"
             reply += "You can obtain this link by right-clicking the message and clicking `Copy Message Link`."
             self.state = State.AWAITING_MESSAGE
+            self.reporting_user = message.author.name
             return [reply]
         
         if self.state == State.AWAITING_MESSAGE:
@@ -94,18 +104,21 @@ class Report:
 
             # Here we've found the message - it's up to you to decide what to do next!
             self.state = State.CONFIRMATION_MESSAGE
+            self.reported_content = self.reported_message.content
+            self.reported_user = self.reported_message.author.name
             return ["I found this message:", "```" + self.reported_message.author.name + ": " + self.reported_message.content + "```", 
                         "Is this the message you want to report? (yes/no)"]
 
         if self.state == State.CONFIRMATION_MESSAGE:
         # ask the user to confirm if this is the message they wanted to report
-
             if message.content.lower() not in ["yes", "no"]:
                 return ["Please respond with yes or no only."]
 
             if message.content.lower() == "no":
                 self.state = State.AWAITING_MESSAGE
-                return ["I'm sorry, could you please verify the link and try again?"]
+                self.reported_content = None
+                self.reported_user = None
+                return ["I'm sorry, please verify the link and try again?"]
 
             if message.content.lower() == "yes":
                 self.state = State.MESSAGE_IDENTIFIED
@@ -245,10 +258,16 @@ class Report:
                 reply += "\n" + self.reported_message.author.name + " has been blocked."
             return [reply]
 
+
     def report_complete(self):
         return self.state == State.REPORT_COMPLETE
     
-
-
-    
-
+    def get_abuse_name(self):
+        if self.abuse_type == GenAbuseType.SPAM:
+            return "Spam"
+        if self.abuse_type == GenAbuseType.HARASSMENT:
+            return "Harassment"
+        if self.abuse_type == GenAbuseType.OFFENSIVE_CONTENT:
+            return "Offensive Content"
+        if self.abuse_type == GenAbuseType.THREAT:
+            return "Imminent Safety Threat"

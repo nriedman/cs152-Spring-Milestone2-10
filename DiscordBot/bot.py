@@ -1,4 +1,5 @@
 # bot.py
+from enum import Enum, auto
 import discord
 from discord.ext import commands
 import os
@@ -6,7 +7,7 @@ import json
 import logging
 import re
 import requests
-from report import Report
+from report import *
 import pdb
 
 # Set up logging to the console
@@ -26,6 +27,73 @@ with open(token_path) as f:
     discord_token = tokens['discord']
 
 
+class ReportQueue:
+    def __init__(self):
+        self.high_queue = []
+        self.med_queue = []
+        self.low_queue = []
+
+    def assign_priority(self, item):
+        if item.threat_type is not None:
+            item.priority = 'high'
+        elif item.extremist_type == ExtremistContentType.PROPAGANDA or item.extremist_type == ExtremistContentType.VIOLENCE:
+            item.priority = 'med'
+        else:
+            item.priority = 'low'
+
+    def add(self, item):
+        self.assign_priority(item)
+
+        if item.priority == 'high':
+            self.high_queue.append(item)
+        elif item.priority == 'med':
+            self.med_queue.append(item)
+        elif item.priority == 'low':
+            self.low_queue.append(item)
+
+    def pop(self):
+        if len(self.high_queue) > 0:
+            return self.high_queue.pop(0)
+        elif len(self.med_queue) > 0:
+            return self.med_queue.pop(0)
+        elif len(self.low_queue) > 0:
+            return self.low_queue.pop(0)
+        
+        return None
+
+    def peek(self):
+        if len(self.high_queue) > 0:
+            return self.high_queue[0]
+        elif len(self.med_queue) > 0:
+            return self.med_queue[0]
+        elif len(self.low_queue) > 0:
+            return self.low_queue[0]
+        
+        return None
+
+    def is_empty(self):
+        return len(self.high_queue) == 0 and len(self.med_queue) == 0 and len(self.low_queue) == 0
+
+    def __str__(self):
+        return f"High: {self.high_queue}\nMed: {self.med_queue}\nLow: {self.low_queue}"
+
+    def __len__(self):
+        return len(self.high_queue) + len(self.med_queue) + len(self.low_queue)
+
+
+class ModCommands:
+    START = 'start mod'
+    END = 'quit'
+    HELP = 'help'
+    NEXT = 'start next'
+    COUNT = 'count'
+    PREVIEW = 'preview'
+
+class ModState(Enum):
+    IDLE = auto()
+    AWAIT_SEVERITY = auto()
+
+
 class ModBot(discord.Client):
     def __init__(self): 
         intents = discord.Intents.default()
@@ -34,6 +102,14 @@ class ModBot(discord.Client):
         self.group_num = None
         self.mod_channels = {} # Map from guild to the mod channel id for that guild
         self.reports = {} # Map from user IDs to the state of their report
+
+        self.queue = ReportQueue()
+        self.report_history = {}  # Map from user IDs to relevant stats about their past reports
+
+        self.mod_mode = False
+        self.mod_state = ModState.IDLE
+        self.current_report = None
+
 
     async def on_ready(self):
         print(f'{self.user.name} has connected to Discord! It is these guilds:')
@@ -71,6 +147,25 @@ class ModBot(discord.Client):
             await self.handle_dm(message)
 
     async def handle_dm(self, message):
+        # Watch for the start of a mod flow
+        if message.content.lower() == ModCommands.START:
+            self.mod_mode = True
+            await message.channel.send(f"Mode mode enabled. Use the `{ModCommands.HELP}` command for more information.")
+            return
+
+        # If mod mode is active, handle the message as a mod command instead of a report
+        if self.mod_mode:
+            if message.content == ModCommands.END:
+                self.mod_mode = False
+                await message.channel.send("Mod mode disabled.")
+                return
+
+            r = await self.handle_mod_command(message)
+            for response in r:
+                await message.channel.send(response)
+            
+            return
+
         # Handle a help message
         if message.content == Report.HELP_KEYWORD:
             reply =  "Use the `report` command to begin the reporting process.\n"
@@ -92,11 +187,78 @@ class ModBot(discord.Client):
         # Let the report class handle this message; forward all the messages it returns to uss
         responses = await self.reports[author_id].handle_message(message)
         for r in responses:
+            # Nick Comment:
+            # Possibly add a tag for system action messages,
+            # then have logic to send those messages to the public channel here?
+
             await message.channel.send(r)
 
         # If the report is complete or cancelled, remove it from our map
         if self.reports[author_id].report_complete():
+            new_report = self.reports[author_id]
+
+            # Add the report to the queue if it's valid
+            if new_report.is_valid:
+                self.queue.add(new_report)
+
             self.reports.pop(author_id)
+
+    async def handle_mod_command(self, message):
+        '''
+        This function is called whenever a message is sent in mod mode. 
+        It handles all system actions related to the moderator flow.
+        '''
+        if message.content.lower() == ModCommands.HELP:
+            reply = f"Use the `{ModCommands.COUNT}` command to see how many reports are in the queue.\n"
+            reply += f"Use the `{ModCommands.PREVIEW}` command to see the next report in the queue.\n"
+            reply +=  f"Use the `{ModCommands.NEXT}` command to begin the moderation process on the next report in the queue.\n"
+            reply += f"Use the `{ModCommands.END}` command to end the moderation process."
+            return [reply]
+        
+        if message.content.lower() == ModCommands.COUNT:
+            count = len(self.queue)
+            return [f"There are {count} reports in the queue."]
+
+        if message.content.lower() == ModCommands.PREVIEW:
+            next_report = self.queue.peek()
+            if next_report is None:
+                return ["There are no reports in the queue."]
+            return [f"Next report: {next_report.get_abuse_name()}, Priority: {next_report.priority}"]
+        
+        if message.content.lower() == ModCommands.NEXT:
+            next_report = self.queue.pop()
+            if next_report is None:
+                return ["There are no reports in the queue."]
+            
+            self.mod_state = ModState.AWAIT_SEVERITY
+
+            out = "Report: \n"
+            out += f"Abuse type: {next_report.get_abuse_name()}\n"
+            out += f"Reported User: {next_report.reported_user}\n"
+            out += f"Reported By: {next_report.reportng_user}\n"
+            out += f"Content: {next_report.reported_content}\n"
+            out += f"Additional Comments: {next_report.comment}"
+
+            request = "Please assign a severity level to this report.\nOptions are: false, 0, 1, 2, 3."
+
+            self.current_report = next_report
+            return [out, request]
+        
+        if self.mod_state == ModState.AWAIT_SEVERITY:
+            if self.current_report is None:
+                return ["ERROR: Awaiting severity level, but no report is currently being moderated."]
+
+            if message.content.lower() not in ['false', '0', '1', '2', '3']:
+                return ["Invalid severity level. Please try again.\nOptions are: false, 0, 1, 2, 3."]
+            
+            severity = message.content.lower()
+            self.current_report.severity = severity
+
+            # TODO: Flush out the rest of the system actions here (i.e. second half of the moderation process)
+            self.auto_mod(severity)
+            
+            return [f"Report assigned severity {severity}. Continuing with automatic application of moderation actions."]
+
 
     async def handle_channel_message(self, message):
         # Only handle messages sent in the "group-#" channel
