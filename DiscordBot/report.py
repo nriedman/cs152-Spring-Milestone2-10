@@ -58,7 +58,10 @@ class Report:
 
         self.reported_content = None
         self.reported_user = None
+        self.reported_user_id = None
         self.reporting_user = None
+        self.reporting_user_id = None
+        self.block_reported_user = False
 
         self.severity = None
         self.is_valid = True
@@ -84,6 +87,7 @@ class Report:
             reply += "You can obtain this link by right-clicking the message and clicking `Copy Message Link`."
             self.state = State.AWAITING_MESSAGE
             self.reporting_user = message.author.name
+            self.reporting_user_id = message.author.id
             return [reply]
         
         if self.state == State.AWAITING_MESSAGE:
@@ -106,6 +110,7 @@ class Report:
             self.state = State.CONFIRMATION_MESSAGE
             self.reported_content = self.reported_message.content
             self.reported_user = self.reported_message.author.name
+            self.reported_user_id = self.reported_message.author.id
             return ["I found this message:", "```" + self.reported_message.author.name + ": " + self.reported_message.content + "```", 
                         "Is this the message you want to report? (yes/no)"]
 
@@ -118,6 +123,7 @@ class Report:
                 self.state = State.AWAITING_MESSAGE
                 self.reported_content = None
                 self.reported_user = None
+                self.reported_user_id = None
                 return ["I'm sorry, please verify the link and try again?"]
 
             if message.content.lower() == "yes":
@@ -254,7 +260,7 @@ class Report:
             reply += "Our content moderation team will review this post and decide on an appropriate action."
             self.state = State.REPORT_COMPLETE
             if message.content.lower() == "yes":
-                # TODO: output block user message in channel
+                self.block_reported_user = True
                 reply += "\n" + self.reported_message.author.name + " has been blocked."
             return [reply]
 
@@ -271,3 +277,16 @@ class Report:
             return "Offensive Content"
         if self.abuse_type == GenAbuseType.THREAT:
             return "Imminent Safety Threat"
+
+    def __str__(self):
+        out = "Report: \n"
+        out += f"Abuse type: {self.get_abuse_name()}\n"
+        out += f"Reported User: {self.reported_user} (id: {self.reported_user_id})\n"
+        out += f"Reported By: {self.reporting_user} (id: {self.reporting_user_id})\n"
+        out += f"Block Requested: {'Yes' if self.block_reported_user else 'No'}\n"
+        out += f"Content: {self.reported_content}\n"
+        out += f"Additional Comments: {self.comment}"
+        return out
+    
+    def stringified(self):
+        return self.__str__()

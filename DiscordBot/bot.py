@@ -110,6 +110,7 @@ class ModBot(discord.Client):
         self.mod_mode = {}  # Map from user IDs to whether they are in mod mode
         self.mod_state = ModState.IDLE
         self.current_report = None
+        self.mod_channel = None
 
 
     async def on_ready(self):
@@ -130,6 +131,7 @@ class ModBot(discord.Client):
             for channel in guild.text_channels:
                 if channel.name == f'group-{self.group_num}-mod':
                     self.mod_channels[guild.id] = channel
+                    self.mod_channel = channel
         
 
     async def on_message(self, message):
@@ -174,6 +176,7 @@ class ModBot(discord.Client):
         if message.content == Report.HELP_KEYWORD:
             reply =  "Use the `report` command to begin the reporting process.\n"
             reply += "Use the `cancel` command to cancel the report process.\n"
+            reply += f"MOD USE ONLY: Use the `{ModCommands.START}` command to enable mod mode.\n"
             await message.channel.send(reply)
             return
 
@@ -191,10 +194,6 @@ class ModBot(discord.Client):
         # Let the report class handle this message; forward all the messages it returns to uss
         responses = await self.reports[author_id].handle_message(message)
         for r in responses:
-            # Nick Comment:
-            # Possibly add a tag for system action messages,
-            # then have logic to send those messages to the public channel here?
-
             await message.channel.send(r)
 
         # If the report is complete or cancelled, remove it from our map
@@ -204,6 +203,15 @@ class ModBot(discord.Client):
             # Add the report to the queue if it's valid
             if new_report.is_valid:
                 self.queue.add(new_report)
+            
+            # Prev Idea: Possibly add a tag for system action messages,
+            # then have logic to send those messages to the public channel here?
+            # Now: Inform the mod channel that a new report was generated and is currently in the queue
+            mod_msg = ''.join(["NEW REPORT:\n",
+                               "A new report was generated and has been added to the queue:\n",
+                                f"`{new_report.stringified()}`",
+                                "\n---------------------------------------\n---------------------------------------\n"])
+            await self.mod_channel.send(mod_msg) 
 
             self.reports.pop(author_id)
 
@@ -236,12 +244,7 @@ class ModBot(discord.Client):
             
             self.mod_state = ModState.AWAIT_SEVERITY
 
-            out = "Report: \n"
-            out += f"Abuse type: {next_report.get_abuse_name()}\n"
-            out += f"Reported User: {next_report.reported_user}\n"
-            out += f"Reported By: {next_report.reporting_user}\n"
-            out += f"Content: {next_report.reported_content}\n"
-            out += f"Additional Comments: {next_report.comment}"
+            out = f"`{next_report.stringified()}`"
 
             request = "Please assign a severity level to this report.\nOptions are: false, 0, 1, 2, 3."
 
@@ -258,43 +261,70 @@ class ModBot(discord.Client):
             severity = message.content.lower()
             self.current_report.severity = severity
 
-            # TODO: Flush out the rest of the system actions here (i.e. second half of the moderation process)
+            # determine appropriate responses and system messages based on severity
             if severity == 'false':
-                system_message = f"False Report. User account {self.current_report.reporting_user} has been warned about making false reports, and this has been internally recorded."
-                response = "Warning: Please refrain from falsely reporting posts. Subsequent offenses will result in a ban."
-                if self.current_report.reporting_user in self.false_report_history:
-                    false_reports = self.false_report_history[self.current_report.reporting_user]
-                    if len(false_reports) > 2:
-                        system_message = f"False Report. User account {self.current_report.reporting_user} has been removed due to too many false reports."
-                        response = "Your account has been removed due to repeated false reporting offenses."
-                else:
-                    self.false_report_history[self.current_report.reporting_user] = [self.current_report]
+                system_message = f"False Report. User account {self.current_report.reporting_user} (id: {self.current_report.reporting_user_id}) has been warned about making false reports, and this has been internally recorded."
+                response = f"Warning: Please refrain from falsely reporting posts. Subsequent offenses will result in a ban. You recently reported {self.current_report.reported_user}'s post."
+                
+                if self.current_report.reporting_user not in self.false_report_history:
+                    self.false_report_history[self.current_report.reporting_user] = []
+                self.false_report_history[self.current_report.reporting_user].append(self.current_report)
+                
+                if len(self.false_report_history[self.current_report.reporting_user]) > 2:
+                    system_message = f"False Report. User account {self.current_report.reporting_user} (id: {self.current_report.reporting_user_id}) has been removed due to too many false reports."
+                    response = f"Your account has been removed due to repeated false reporting offenses. You most recently reported {self.current_report.reported_user}'s post."                    
+                # inform user via DM with warning
+                await self.send_dm(self.current_report.reporting_user_id, response)
             else:
-                system_message = ""
-                response = "Your post has been taken down and your account removed for violating our Community Standards."
-                if severity == '0':
+                system_message = f"User account {self.current_report.reported_user} (id: {self.current_report.reported_user_id}) has been removed and their post taken down due to too many reports against them."
+                response = "Your post has been taken down and your account removed for violating our Community Standards too many times."
+                
+                if severity == "0":
                     system_message = "Severity 0. No action taken"
                     response = ""
-                elif severity == "1":
-                    if self.current_report.reported_user in self.report_history and len(self.report_history[self.current_report.reported_user]) > 2:
-                        system_message = f"Severity 1. User account {self.current_report.reported_user} has been removed and their post taken down due to too many reports against them."
-                    else:
-                        system_message = f"Severity 1. User account {self.current_report.reported_user} has been warned and their post taken down."
-                        response = "Warning: This post violates our Community Standards. We have taken it down, and future offenses will result in the removal of your account."
-                elif severity == "2":
-                    system_message = f"Severity 2. User account {self.current_report.reported_user} has been removed and their post taken down due to too many reports against them."
-                else: # severity == 3
-                    system_message = f"Severity 3! User account {self.current_report.reported_user} has been removed and their post taken down due to too many reports against them.\n"
-                    system_message += f"Severity 3! Report has also been forwarded to manager to review, so they can alert authorities if necessary."
-                if severity != "0":
+                else:
                     if self.current_report.reported_user not in self.report_history: 
                         self.report_history[self.current_report.reported_user] = []
                     self.report_history[self.current_report.reported_user].append(self.current_report)
-            #TODO: how to handle system messages (in what channel sent - mod channel? along with report?)
-            # also need to be able to DM responses to reporting user (false report case) and to reported user 
-            return [f"Report assigned severity {severity}. Continuing with automatic application of moderation actions."]
+                
+                if severity == "1":
+                    system_message = "Severity 1. " + system_message
+                    if len(self.report_history[self.current_report.reported_user]) <= 2:
+                        system_message = f"Severity 1. User account {self.current_report.reported_user} (id: {self.current_report.reported_user_id}) has been warned and their post taken down."
+                        response = "Warning: This post violates our Community Standards. We have taken it down, and future offenses will result in the removal of your account."
+                if severity == "2":
+                    system_message = "Severity 2. " + system_message
+                if severity == "3":
+                    system_message = "Severity 3! " + system_message + "\n"
+                    system_message += "Report has also been forwarded to manager to review, so they can alert authorities if necessary."
+            
+            block_message = f"{self.current_report.reported_user} has been blocked for {self.current_report.reporting_user} since they requested the block in their report."
+            # inform user via DM w/ response, send summary in mod channel, and return result to current moderator
+            await self.send_dm(self.current_report.reported_user_id, response)
+            result = ''.join([f"Report assigned severity {severity}.\n\n", 
+                    "The system has made the following action(s): \n", 
+                    f"`{system_message}`\n",
+                    f"`{block_message if self.current_report.block_reported_user else ''}`\n\n",
+                    f"The following response has been sent to {'the reporting user account (since it was a false report)' if severity == 'false' else 'the reported user account (user who posted the content that was reported)'} (account name: {self.current_report.reporting_user if severity == 'false' else self.current_report.reported_user}): \n",
+                    f"`{response}` \n\n",
+                    "COMPLETE: The report has been reviewed and removed from the queue.\n", 
+                    "---------------------------------------\n---------------------------------------\n"])
+            mod_summary = ''.join([f"REPORT REVIEW SUMMARY: For the following report...\n",
+                            f"`{self.current_report.stringified()}`\n\n",
+                            result])
+            await self.mod_channel.send(mod_summary)
+            return [result]
+
+        return [f"Mode mode is currently enabled. Use the `{ModCommands.HELP}` command for more information."]
 
     
+    async def send_dm(self, user_id, msg):
+        try:
+            user = await client.fetch_user(user_id)
+            await user.send(msg)
+        except Exception as e:
+            print(e)
+
 
     async def handle_channel_message(self, message):
         # Only handle messages sent in the "group-#" channel
