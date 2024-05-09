@@ -107,7 +107,7 @@ class ModBot(discord.Client):
         self.false_report_history = {} # map from reporting user ids to list of false reports they have made
         self.report_history = {}  # Map from reported user IDs to list of the reports filed against them
 
-        self.mod_mode = False
+        self.mod_mode = {}  # Map from user IDs to whether they are in mod mode
         self.mod_state = ModState.IDLE
         self.current_report = None
 
@@ -150,14 +150,17 @@ class ModBot(discord.Client):
     async def handle_dm(self, message):
         # Watch for the start of a mod flow
         if message.content.lower() == ModCommands.START:
-            self.mod_mode = True
+            self.mod_mode[message.author.id] = True
             await message.channel.send(f"Mode mode enabled. Use the `{ModCommands.HELP}` command for more information.")
             return
 
         # If mod mode is active, handle the message as a mod command instead of a report
-        if self.mod_mode:
+        if message.author.id in self.mod_mode:
+            if not self.mod_mode[message.author.id]:
+                await message.channel.send("ERROR: User is registered as moderator, but not in mod mode.")
+
             if message.content == ModCommands.END:
-                self.mod_mode = False
+                self.mod_mode.pop(message.author.id)
                 await message.channel.send("Mod mode disabled.")
                 return
 
