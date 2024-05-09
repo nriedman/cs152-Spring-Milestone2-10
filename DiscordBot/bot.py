@@ -104,7 +104,8 @@ class ModBot(discord.Client):
         self.reports = {} # Map from user IDs to the state of their report
 
         self.queue = ReportQueue()
-        self.report_history = {}  # Map from user IDs to relevant stats about their past reports
+        self.false_report_history = {} # map from reporting user ids to list of false reports they have made
+        self.report_history = {}  # Map from reported user IDs to list of the reports filed against them
 
         self.mod_mode = False
         self.mod_state = ModState.IDLE
@@ -255,10 +256,42 @@ class ModBot(discord.Client):
             self.current_report.severity = severity
 
             # TODO: Flush out the rest of the system actions here (i.e. second half of the moderation process)
-            self.auto_mod(severity)
-            
+            if severity == 'false':
+                system_message = f"False Report. User account {self.current_report.reporting_user} has been warned about making false reports, and this has been internally recorded."
+                response = "Warning: Please refrain from falsely reporting posts. Subsequent offenses will result in a ban."
+                if self.current_report.reporting_user in self.false_report_history:
+                    false_reports = self.false_report_history[self.current_report.reporting_user]
+                    if len(false_reports) > 2:
+                        system_message = f"False Report. User account {self.current_report.reporting_user} has been removed due to too many false reports."
+                        response = "Your account has been removed due to repeated false reporting offenses."
+                else:
+                    self.false_report_history[self.current_report.reporting_user] = [self.current_report]
+            else:
+                system_message = ""
+                response = "Your post has been taken down and your account removed for violating our Community Standards."
+                if severity == '0':
+                    system_message = "Severity 0. No action taken"
+                    response = ""
+                elif severity == "1":
+                    if self.current_report.reported_user in self.report_history and len(self.report_history[self.current_report.reported_user]) > 2:
+                        system_message = f"Severity 1. User account {self.current_report.reported_user} has been removed and their post taken down due to too many reports against them."
+                    else:
+                        system_message = f"Severity 1. User account {self.current_report.reported_user} has been warned and their post taken down."
+                        response = "Warning: This post violates our Community Standards. We have taken it down, and future offenses will result in the removal of your account."
+                elif severity == "2":
+                    system_message = f"Severity 2. User account {self.current_report.reported_user} has been removed and their post taken down due to too many reports against them."
+                else: # severity == 3
+                    system_message = f"Severity 3! User account {self.current_report.reported_user} has been removed and their post taken down due to too many reports against them.\n"
+                    system_message += f"Severity 3! Report has also been forwarded to manager to review, so they can alert authorities if necessary."
+                if severity != "0":
+                    if self.current_report.reported_user not in self.report_history: 
+                        self.report_history[self.current_report.reported_user] = []
+                    self.report_history[self.current_report.reported_user].append(self.current_report)
+            #TODO: how to handle system messages (in what channel sent - mod channel? along with report?)
+            # also need to be able to DM responses to reporting user (false report case) and to reported user 
             return [f"Report assigned severity {severity}. Continuing with automatic application of moderation actions."]
 
+    
 
     async def handle_channel_message(self, message):
         # Only handle messages sent in the "group-#" channel
