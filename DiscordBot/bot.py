@@ -235,7 +235,7 @@ class ModBot(discord.Client):
             out = "Report: \n"
             out += f"Abuse type: {next_report.get_abuse_name()}\n"
             out += f"Reported User: {next_report.reported_user}\n"
-            out += f"Reported By: {next_report.reportng_user}\n"
+            out += f"Reported By: {next_report.reporting_user}\n"
             out += f"Content: {next_report.reported_content}\n"
             out += f"Additional Comments: {next_report.comment}"
 
