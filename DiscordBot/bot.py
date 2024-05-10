@@ -305,9 +305,11 @@ class ModBot(discord.Client):
                     system_message = "Severity 3! " + system_message + "\n"
                     system_message += "Report has also been forwarded to manager to review, so they can alert authorities if necessary."
                     await self.group_channel.send(f"User {self.current_report.reported_user} has been banned for violating Community Standards.")
+
                 await self.send_dm(self.current_report.reported_user_id, response)
+            # informed user via DM w/ response, send summary in mod channel, and return result to current moderator
             block_message = f"{self.current_report.reported_user} has been blocked for {self.current_report.reporting_user} since they requested the block in their report."
-            # inform user via DM w/ response, send summary in mod channel, and return result to current moderator
+            
             result = ''.join([f"Report assigned severity {severity}.\n\n", 
                     "The system has made the following action(s): \n", 
                     f"`{system_message}`\n",
