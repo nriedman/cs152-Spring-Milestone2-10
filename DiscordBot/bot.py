@@ -111,6 +111,7 @@ class ModBot(discord.Client):
         self.mod_state = ModState.IDLE
         self.current_report = None
         self.mod_channel = None
+        self.group_channel = None
 
 
     async def on_ready(self):
@@ -132,6 +133,8 @@ class ModBot(discord.Client):
                 if channel.name == f'group-{self.group_num}-mod':
                     self.mod_channels[guild.id] = channel
                     self.mod_channel = channel
+                if channel.name == f'group-{self.group_num}':
+                    self.group_channel = channel
         
 
     async def on_message(self, message):
@@ -292,15 +295,19 @@ class ModBot(discord.Client):
                     if len(self.report_history[self.current_report.reported_user]) <= 2:
                         system_message = f"Severity 1. User account {self.current_report.reported_user} (id: {self.current_report.reported_user_id}) has been warned and their post taken down."
                         response = "Warning: This post violates our Community Standards. We have taken it down, and future offenses will result in the removal of your account."
+                    else:
+                        await self.group_channel.send(f"User {self.current_report.reported_user} has been banned for violating Community Standards.")
+                
                 if severity == "2":
                     system_message = "Severity 2. " + system_message
+                    await self.group_channel.send(f"User {self.current_report.reported_user} has been banned for violating Community Standards.")
                 if severity == "3":
                     system_message = "Severity 3! " + system_message + "\n"
                     system_message += "Report has also been forwarded to manager to review, so they can alert authorities if necessary."
-            
+                    await self.group_channel.send(f"User {self.current_report.reported_user} has been banned for violating Community Standards.")
+                await self.send_dm(self.current_report.reported_user_id, response)
             block_message = f"{self.current_report.reported_user} has been blocked for {self.current_report.reporting_user} since they requested the block in their report."
             # inform user via DM w/ response, send summary in mod channel, and return result to current moderator
-            await self.send_dm(self.current_report.reported_user_id, response)
             result = ''.join([f"Report assigned severity {severity}.\n\n", 
                     "The system has made the following action(s): \n", 
                     f"`{system_message}`\n",
