@@ -40,9 +40,9 @@ class ThreatType():
     TERROR = 4
 
 class Report:
-    START_KEYWORD = "report"
-    CANCEL_KEYWORD = "cancel"
-    HELP_KEYWORD = "help"
+    START_KEYWORD = "\report"
+    CANCEL_KEYWORD = "\cancel"
+    HELP_KEYWORD = "\help"
 
     def __init__(self, client):
         self.state = State.REPORT_START

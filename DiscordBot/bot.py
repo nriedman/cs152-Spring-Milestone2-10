@@ -82,12 +82,12 @@ class ReportQueue:
 
 
 class ModCommands:
-    START = 'start mod'
-    END = 'quit'
-    HELP = 'help'
-    NEXT = 'start next'
-    COUNT = 'count'
-    PREVIEW = 'preview'
+    START = '\start mod'
+    END = '\quit'
+    HELP = '\help'
+    NEXT = '\start next'
+    COUNT = '\count'
+    PREVIEW = '\preview'
 
 class ModState(Enum):
     IDLE = auto()
