@@ -156,7 +156,7 @@ class ModBot(discord.Client):
         # Watch for the start of a mod flow
         if message.content.lower() == ModCommands.START:
             self.mod_mode[message.author.id] = True
-            await message.channel.send(f"Mode mode enabled. Use the `{ModCommands.HELP}` command for more information.")
+            await message.channel.send(f"Mod mode enabled. Use the `{ModCommands.HELP}` command for more information.")
             return
 
         # If mod mode is active, handle the message as a mod command instead of a report
@@ -322,9 +322,13 @@ class ModBot(discord.Client):
                             f"`{self.current_report.stringified()}`\n\n",
                             result])
             await self.mod_channel.send(mod_summary)
+            
+            self.current_report = None
+            self.mod_state = ModState.IDLE
+            
             return [result]
 
-        return [f"Mode mode is currently enabled. Use the `{ModCommands.HELP}` command for more information."]
+        return [f"Mod mode is currently enabled. Use the `{ModCommands.HELP}` command for more information."]
 
     
     async def send_dm(self, user_id, msg):
