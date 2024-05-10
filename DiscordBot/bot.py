@@ -177,8 +177,8 @@ class ModBot(discord.Client):
 
         # Handle a help message
         if message.content == Report.HELP_KEYWORD:
-            reply =  "Use the `report` command to begin the reporting process.\n"
-            reply += "Use the `cancel` command to cancel the report process.\n"
+            reply =  "Use the `\\report` command to begin the reporting process.\n"
+            reply += "Use the `\\cancel` command to cancel the report process.\n"
             reply += f"MOD USE ONLY: Use the `{ModCommands.START}` command to enable mod mode.\n"
             await message.channel.send(reply)
             return
