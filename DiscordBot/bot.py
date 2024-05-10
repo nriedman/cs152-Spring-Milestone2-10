@@ -309,11 +309,12 @@ class ModBot(discord.Client):
                 await self.send_dm(self.current_report.reported_user_id, response)
             # informed user via DM w/ response, send summary in mod channel, and return result to current moderator
             block_message = f"{self.current_report.reported_user} has been blocked for {self.current_report.reporting_user} since they requested the block in their report."
-            
+            if self.current_report.block_reported_user:
+                await self.send_dm(self.current_report.reporting_user_id, f"{self.current_report.reported_user} has been blocked for you since you requested it in your most recent report")
             result = ''.join([f"Report assigned severity {severity}.\n\n", 
                     "The system has made the following action(s): \n", 
                     f"`{system_message}`\n",
-                    f"`{block_message if self.current_report.block_reported_user else ''}`\n\n",
+                    f"`{block_message}`\n\n" if self.current_report.block_reported_user else "-\n\n",
                     f"The following response has been sent to {'the reporting user account (since it was a false report)' if severity == 'false' else 'the reported user account (user who posted the content that was reported)'} (account name: {self.current_report.reporting_user if severity == 'false' else self.current_report.reported_user}): \n",
                     f"`{response}` \n\n",
                     "COMPLETE: The report has been reviewed and removed from the queue.\n", 
