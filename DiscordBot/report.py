@@ -40,7 +40,7 @@ class ThreatType():
     TERROR = 4
 
 class Report:
-    START_KEYWORD = "\report"
+    START_KEYWORD = "\\report"
     CANCEL_KEYWORD = "\cancel"
     HELP_KEYWORD = "\help"
 
