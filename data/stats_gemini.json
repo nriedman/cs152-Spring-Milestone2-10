@@ -1,0 +1,21 @@
+{
+    "gemini_stats": {
+        "tp": 342,
+        "tn": 999,
+        "fp": 1,
+        "fn": 54,
+        "predicted_no": 1053,
+        "predicted_yes": 343,
+        "actual_no": 1000,
+        "actual_yes": 396,
+        "accuracy": 0.9606017191977078,
+        "misclassification_rate": 0.03939828080229226,
+        "true_pos_rate": 0.8636363636363636,
+        "false_pos_rate": 0.001,
+        "true_neg_rate": 0.999,
+        "precision": 0.9970845481049563,
+        "prevalence": 0.2836676217765043,
+        "null_error_rate": 0.7163323782234957,
+        "f1": 0.925575101488498
+    }
+}
