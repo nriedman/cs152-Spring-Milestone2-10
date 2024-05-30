@@ -1,21 +1,21 @@
 {
     "gemini_stats": {
-        "tp": 342,
-        "tn": 999,
+        "tp": 349,
+        "tn": 998,
         "fp": 1,
-        "fn": 54,
-        "predicted_no": 1053,
-        "predicted_yes": 343,
-        "actual_no": 1000,
-        "actual_yes": 396,
-        "accuracy": 0.9606017191977078,
-        "misclassification_rate": 0.03939828080229226,
-        "true_pos_rate": 0.8636363636363636,
-        "false_pos_rate": 0.001,
-        "true_neg_rate": 0.999,
-        "precision": 0.9970845481049563,
-        "prevalence": 0.2836676217765043,
-        "null_error_rate": 0.7163323782234957,
-        "f1": 0.925575101488498
+        "fn": 48,
+        "predicted_no": 1046,
+        "predicted_yes": 350,
+        "actual_no": 999,
+        "actual_yes": 397,
+        "accuracy": 0.9648997134670487,
+        "misclassification_rate": 0.03510028653295129,
+        "true_pos_rate": 0.8790931989924433,
+        "false_pos_rate": 0.001001001001001001,
+        "true_neg_rate": 0.998998998998999,
+        "precision": 0.9971428571428571,
+        "prevalence": 0.2843839541547278,
+        "null_error_rate": 0.7156160458452722,
+        "f1": 0.9344042838018741
     }
 }
