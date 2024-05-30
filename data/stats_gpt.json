@@ -1,0 +1,21 @@
+{
+    "gpt_stats": {
+        "tp": 273,
+        "tn": 1000,
+        "fp": 0,
+        "fn": 125,
+        "predicted_no": 1125,
+        "predicted_yes": 273,
+        "actual_no": 1000,
+        "actual_yes": 398,
+        "accuracy": 0.9105865522174535,
+        "misclassification_rate": 0.08941344778254649,
+        "true_pos_rate": 0.6859296482412061,
+        "false_pos_rate": 0.0,
+        "true_neg_rate": 1.0,
+        "precision": 1.0,
+        "prevalence": 0.28469241773962806,
+        "null_error_rate": 0.7153075822603719,
+        "f1": 0.8137108792846498
+    }
+}
