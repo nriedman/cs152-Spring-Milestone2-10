@@ -1,0 +1,22 @@
+{
+    "sub_confusion_matrix": {
+        "actual_propaganda": {
+            "predicted_propaganda": 66,
+            "predicted_radicalization": 82,
+            "predicted_recruitment": 12,
+            "predicted_none": 66
+        },
+        "actual_radicalization": {
+            "predicted_propaganda": 12,
+            "predicted_radicalization": 34,
+            "predicted_recruitment": 4,
+            "predicted_none": 21
+        },
+        "actual_recruitment": {
+            "predicted_propaganda": 0,
+            "predicted_radicalization": 28,
+            "predicted_recruitment": 34,
+            "predicted_none": 38
+        }
+    }
+}
