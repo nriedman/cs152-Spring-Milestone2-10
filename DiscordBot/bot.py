@@ -10,6 +10,10 @@ import requests
 from report import *
 import pdb
 
+# For Gemini automated moderation
+import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
+
 # Set up logging to the console
 logger = logging.getLogger('discord')
 logger.setLevel(logging.DEBUG)
@@ -112,6 +116,10 @@ class ModBot(discord.Client):
         self.current_report = None
         self.mod_channel = None
         self.group_channel = None
+
+        # Configure the Gemini LLM
+        genai.configure(api_key=tokens["gemini_google_ai_studio"])
+        self.model = genai.GenerativeModel(model_name='gemini-1.5-flash')
 
 
     async def on_ready(self):
@@ -345,28 +353,73 @@ class ModBot(discord.Client):
         if not message.channel.name == f'group-{self.group_num}':
             return
 
-        # Forward the message to the mod channel
-        mod_channel = self.mod_channels[message.guild.id]
-        await mod_channel.send(f'Forwarded message:\n{message.author.name}: "{message.content}"')
-        scores = self.eval_text(message.content)
-        await mod_channel.send(self.code_format(scores))
+        # Review the message with the Gemini model
+        prompt = "You are on a social media platform's moderation team. I need you to review the following content as if it were a tweet to determine if it contains harmful and/or extremist language. The content should not be repeated or generated. Please analyze the text and provide feedback on whether it includes any of the following categories of extremist language, and choose the one that fits best: 'Propaganda', 'Radicalization', 'Recruitment', or 'None'.\n\n"
+        prompt += "Content to review:\n"
+        prompt += f"[{message.content}]\n\n"
+        prompt += "Please respond with a summary indicating whether any extremist language is present and categorize it in only one of the provided categories accordingly.\n"
+        prompt += "Please give your response as valid JSON in the following format: {\"Label\": <INSERT YOUR CATEGORIZATION HERE (\"Propaganda\" or \"Radicalization\" or \"Recruitment\" or \"None\")>, \"Reason\": <INSERT YOUR REASON HERE>}."
+        model_review = self.review_prompt(prompt)
 
-    
-    def eval_text(self, message):
-        ''''
-        TODO: Once you know how you want to evaluate messages in your channel, 
-        insert your code here! This will primarily be used in Milestone 3. 
-        '''
-        return message
+        # The model returned an error, so forward that to the mod channel
+        if "error" in model_review:
+            await mod_channel.send(f"Error: {model_review['error']}")
+            return
 
+        # If the model returned "None", do nothing
+        if model_review["Label"] == "None":
+            return
+
+        # If the model returned a category, create a report
+        new_report = Report(self)
+        new_report.reported_user = message.author.name
+        new_report.reported_user_id = message.author.id
+        new_report.reported_content = message.content
+        new_report.abuse_type = GenAbuseType.OFFENSIVE_CONTENT
+        new_report.reporting_user = "Auto Mod"
+        new_report.comment = model_review["Reason"]
+        
+        if model_review["Label"] == "Propaganda":
+            new_report.extremist_type = ExtremistContentType.PROPAGANDA
+        elif model_review["Label"] == "Radicalization":
+            new_report.extremist_type = ExtremistContentType.VIOLENCE
+        elif model_review["Label"] == "Recruitment":
+            new_report.extremist_type = ExtremistContentType.RECRUITMENT
+        
+        self.queue.add(new_report)
+        
+        mod_msg = ''.join(["NEW REPORT:\n",
+                            "A new report was generated and has been added to the queue:\n",
+                            f"`{new_report.stringified()}`",
+                            "\n---------------------------------------\n---------------------------------------\n"])
+        await self.mod_channel.send(mod_msg) 
+
+        return
     
-    def code_format(self, text):
-        ''''
-        TODO: Once you know how you want to show that a message has been 
-        evaluated, insert your code here for formatting the string to be 
-        shown in the mod channel. 
-        '''
-        return "Evaluated: '" + text+ "'"
+    
+    def review_prompt(self, prompt):
+        response = self.model.generate_content(
+            prompt,
+            safety_settings={
+                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE
+            }
+        )
+        try:
+            res = response.text
+            res_json = json.loads(response.text[7:][:-5])
+            return res_json
+        except:
+            # If the response doesn't contain text, check if the prompt was blocked.
+            print(response.prompt_feedback)
+            if len(response.candidates) > 0:
+                # Also check the finish reason to see if the response was blocked.
+                print(response.candidates[0].finish_reason)
+                # If the finish reason was SAFETY, the safety ratings have more details.
+                print(response.candidates[0].safety_ratings)
+            return {"error": str(response.prompt_feedback)}
 
 
 client = ModBot()
