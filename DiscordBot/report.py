@@ -55,6 +55,7 @@ class Report:
         self.offensive_type = None
         self.extremist_type = None
         self.threat_type = None
+        self.auto_label = None
 
         self.reported_content = None
         self.reported_user = None
@@ -283,6 +284,8 @@ class Report:
         out += f"Abuse type: {self.get_abuse_name()}\n"
         out += f"Reported User: {self.reported_user} (id: {self.reported_user_id})\n"
         out += f"Reported By: {self.reporting_user} (id: {self.reporting_user_id})\n"
+        if self.auto_label is not None:
+            out += f"Auto label of content: {self.auto_label}\n"
         out += f"Block Requested: {'Yes' if self.block_reported_user else 'No'}\n"
         out += f"Content: {self.reported_content}\n"
         out += f"Additional Comments: {self.comment}"

@@ -378,6 +378,7 @@ class ModBot(discord.Client):
         new_report.abuse_type = GenAbuseType.OFFENSIVE_CONTENT
         new_report.reporting_user = "Auto Mod"
         new_report.comment = model_review["Reason"]
+        new_report.auto_label = model_review["Label"]
         
         if model_review["Label"] == "Propaganda":
             new_report.extremist_type = ExtremistContentType.PROPAGANDA
